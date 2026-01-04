@@ -9,7 +9,7 @@ namespace GizmoLoader;
 public class GizmoMain : MelonPlugin
 {
     public MelonPreferences_Category preferences_Category;
-    public MelonPreferences_Entry<bool> LateLoadingEnabled;
+    public MelonPreferences_Entry<string> ModsDirectory;
 
     private const NotifyFilters Filters = NotifyFilters.Attributes
                              | NotifyFilters.CreationTime
@@ -24,9 +24,10 @@ public class GizmoMain : MelonPlugin
 
     public override void OnInitializeMelon()
     {
+        LoggerInstance.Msg("===GIZMOLOADER LOADED===");
         preferences_Category = MelonPreferences.CreateCategory("GizmoLoader");
         preferences_Category.SetFilePath("UserData/GizmoLoader.toml", autoload: true);
-        LateLoadingEnabled = preferences_Category.CreateEntry<bool>("LateLoadingEnabled", true);
+        ModsDirectory = preferences_Category.CreateEntry<string>("ModsDirectory", "/UserData/GizmoMods/");
         #region prefWatcher
         prefWatcher = new(MelonEnvironment.UserDataDirectory);
         prefWatcher.NotifyFilter = Filters;
@@ -35,18 +36,21 @@ public class GizmoMain : MelonPlugin
         prefWatcher.Changed += new FileSystemEventHandler(UpdatePrefs);
         #endregion
         if (!File.Exists($"{MelonEnvironment.UserDataDirectory}/GizmoLoader.toml")) preferences_Category.SaveToFile();
+        if (!Directory.Exists(MelonEnvironment.MelonBaseDirectory + ModsDirectory.Value))
+          Directory.CreateDirectory(MelonEnvironment.MelonBaseDirectory + ModsDirectory.Value);
 
-        watcher = new(MelonEnvironment.ModsDirectory);
+        foreach (var File in Directory.GetFiles(MelonEnvironment.MelonBaseDirectory + ModsDirectory.Value)) 
+          Loader.Load(File);
+        
+        watcher = new(MelonEnvironment.MelonBaseDirectory + ModsDirectory.Value);
         watcher.NotifyFilter = Filters;
         watcher.Filter = "*.dll";
-        watcher.IncludeSubdirectories = true;
         watcher.EnableRaisingEvents = true;
 
-        if (LateLoadingEnabled.Value) watcher.Created += new FileSystemEventHandler(GizmoLoader.Loader.OnCreated);
+        watcher.Created += new FileSystemEventHandler(GizmoLoader.Loader.OnCreated);
+        watcher.Deleted += new FileSystemEventHandler(GizmoLoader.Loader.OnDeleted);
+        watcher.Changed += new FileSystemEventHandler(GizmoLoader.Loader.OnChanged);
     }
 
-    private void UpdatePrefs(object sender, FileSystemEventArgs e)
-    {
-        preferences_Category.LoadFromFile(false);
-    }
+    private void UpdatePrefs(object sender, FileSystemEventArgs e) => preferences_Category.LoadFromFile(false);
 }
