@@ -1,3 +1,5 @@
+using GizmoLoader.Attributes;
+
 using MelonLoader;
 
 using System.Reflection;
