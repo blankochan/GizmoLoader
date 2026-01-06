@@ -4,58 +4,110 @@ using System.Reflection;
 using System.Runtime.Loader;
 
 namespace GizmoLoader;
+
+public struct GizmoModInfo
+{
+  public readonly string Path;
+  public readonly string Hash;
+
+  public readonly MelonAssembly Assembly;
+  public readonly AssemblyLoadContext LoadContext;
+  public Dictionary<string,object> FieldMapping => GetFieldMapping();
+  
+  public GizmoModInfo(MelonAssembly assembly,AssemblyLoadContext loadCtx, string path){
+    Assembly = assembly;
+    LoadContext = loadCtx;
+    Path = path;
+    Hash = assembly.Hash;
+  }
+
+  public Dictionary<string,object> GetFieldMapping()
+  {
+    Dictionary<string,object> fieldMapping = new();
+    foreach (MelonBase melon in this.Assembly.LoadedMelons){
+      foreach (FieldInfo field in melon.GetType().GetFields().Where(field => field.IsDefined(typeof(ReloadableField),false))){
+        fieldMapping.Add(field.Name,field.GetValue(melon));
+      }
+    }
+    return fieldMapping;
+  }
+
+  public void LoadFieldMapping(Dictionary<string,object> mapping)
+  {
+    foreach (MelonBase melon in this.Assembly.LoadedMelons){
+      foreach (FieldInfo field in melon.GetType().GetFields().Where(field => field.IsDefined(typeof(ReloadableField),false)))
+      {
+        if (mapping.TryGetValue(field.Name, out object value))
+          field.SetValue(melon,value);
+      }
+    }
+  }
+}
+
 public static class Loader
 {
-    private static bool FirstReload;
+    private static Dictionary<string,GizmoModInfo> loadedGizmoMods = new();
+    public static IReadOnlyDictionary<string,GizmoModInfo> LoadedGizmoMods = loadedGizmoMods; 
 
-    public static MelonLogger.Instance LoggerInstance = Melon<GizmoLoader.GizmoMain>.Logger;
-    public static Dictionary<string, MelonAssembly> GizmoLoadedMelons = new();
-    public static Dictionary<string, AssemblyLoadContext> GizmoLoadContexts = new();
+
+    private static string sha256File(string path){
+      using (var hasher = System.Security.Cryptography.SHA256.Create())
+      {
+      return Convert.ToHexString(hasher.ComputeHash(File.Open(path,FileMode.Open,FileAccess.Read,FileShare.Read)));
+      }
+    }
 
     internal static void OnCreated(object sender, FileSystemEventArgs e)
     {
-        LoggerInstance.Msg("Late Loading: " + e.Name);
+        GizmoMain.Logger.Msg("Late Loading: " + e.Name);
         Load(e.FullPath);
     }
 
     internal static void OnChanged(object sender, FileSystemEventArgs e)
     {
-        if (!FirstReload)
-        {
-            FirstReload = true;
+        if (LoadedGizmoMods.TryGetValue(e.FullPath,out GizmoModInfo oldInstance)){
+          if (sha256File(e.FullPath) == oldInstance.Hash) 
             return;
+
+          GizmoMain.Logger.Msg("Reloading: " + e.Name);
+          var fieldMapping = oldInstance.FieldMapping;
+          Unload(e.FullPath);
+          Load(e.FullPath,fieldMapping);
         }
-        LoggerInstance.Msg("Reloading: " + e.Name);
-        Unload(e.FullPath);
-        //TODO Implement some sort of variable transfer
-        Load(e.FullPath);
     }
 
     internal static void OnDeleted(object sender, FileSystemEventArgs e)
     {
-        LoggerInstance.Msg("Unloading: " + e.Name);
+        GizmoMain.Logger.Msg("Unloading: " + e.Name);
         Unload(e.FullPath);
     }
-    public static void Load(string Path)
+
+    public static GizmoModInfo Load(string path,Dictionary<string,object> fieldMapping = null)
     {
-        if (GizmoLoadedMelons.ContainsKey(Path)) return;
+        if (loadedGizmoMods.ContainsKey(path))
+          throw new ArgumentException($"{path} is already loaded");
 
-        AssemblyLoadContext LoadCtx = new("GizmoLoader IsolatedAssemblyContext: " + Path, true);
-        FileStream fs = new FileStream(Path, FileMode.Open, FileAccess.Read);
-        Assembly rawAssembly = LoadCtx.LoadFromStream(fs);
-        MelonAssembly NewlyLoadedMelonAssembly = MelonAssembly.LoadMelonAssembly(Path, rawAssembly, true);
+        using (FileStream fs = File.Open(path,FileMode.Open,FileAccess.Read,FileShare.ReadWrite)){
+          AssemblyLoadContext loadCtx = new("GizmoLoader IsolatedAssemblyContext: " + path, true);
+          Assembly rawAssembly = loadCtx.LoadFromStream(fs);
+          MelonAssembly newMelonAssembly = MelonAssembly.LoadMelonAssembly(path, rawAssembly, true);
 
-        foreach (MelonBase melon in NewlyLoadedMelonAssembly.LoadedMelons) melon.Register();
-
-        fs.Close();
-        GizmoLoadedMelons.Add(Path, NewlyLoadedMelonAssembly);
-        GizmoLoadContexts.Add(Path, LoadCtx);
+          GizmoModInfo modInfo = new(newMelonAssembly,loadCtx,path);
+          if (fieldMapping != null)
+            modInfo.LoadFieldMapping(fieldMapping);
+          foreach (MelonBase melon in newMelonAssembly.LoadedMelons)
+            melon.Register();
+          
+          loadedGizmoMods.Add(path,modInfo);
+          return modInfo;
+        }
     }
 
-    public static void Unload(string Path)
+    public static void Unload(string path)
     {
-        if (!GizmoLoadedMelons.ContainsKey(Path) || !GizmoLoadContexts.ContainsKey(Path)) return;
-        MelonAssembly assembly = GizmoLoadedMelons[Path];
+       if(!loadedGizmoMods.TryGetValue(path, out GizmoModInfo modInfo))
+         return;
+        MelonAssembly assembly = modInfo.Assembly;
         assembly.UnregisterMelons();
 
         FieldInfo field = typeof(MelonAssembly).GetField("loadedAssemblies", BindingFlags.NonPublic | BindingFlags.Static); // Yummy Reflection
@@ -63,8 +115,7 @@ public static class Loader
         internalAssemblies.Remove(assembly);
         field.SetValue(null, internalAssemblies);
 
-        GizmoLoadedMelons.Remove(Path);
-        GizmoLoadContexts[Path].Unload();
-        GizmoLoadContexts.Remove(Path);
+        modInfo.LoadContext.Unload();
+        loadedGizmoMods.Remove(path);
     }
 }

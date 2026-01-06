@@ -8,8 +8,9 @@ using MelonLoader.Utils;
 namespace GizmoLoader;
 public class GizmoMain : MelonPlugin
 {
-    public MelonPreferences_Category preferences_Category;
-    public MelonPreferences_Entry<string> ModsDirectory;
+    static internal MelonLogger.Instance Logger => Melon<GizmoMain>.Logger;
+    private MelonPreferences_Category preferences_Category;
+    private MelonPreferences_Entry<string> ModsDirectory;
 
     private const NotifyFilters Filters = NotifyFilters.Attributes
                              | NotifyFilters.CreationTime
