@@ -5,11 +5,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
   </PropertyGroup>
-    <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>embedded</DebugType> 
-
   </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="LavaGang.MelonLoader" Version="0.7.1" />
   </ItemGroup>
