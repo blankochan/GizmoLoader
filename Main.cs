@@ -2,10 +2,10 @@
 using MelonLoader.Utils;
 
 [assembly: MelonInfo(typeof(GizmoLoader.GizmoMain), BuildInfo.Name, BuildInfo.Version, BuildInfo.Author)]
-[assembly: MelonGame("Buckethead Entertainment", "RUMBLE")]
 [assembly: MelonColor(255, 255, 170, 238)] // #FAE pink :3
 
 namespace GizmoLoader;
+
 public class GizmoMain : MelonPlugin
 {
     static internal MelonLogger.Instance Logger => Melon<GizmoMain>.Logger;
@@ -23,7 +23,7 @@ public class GizmoMain : MelonPlugin
     private FileSystemWatcher watcher;
     private FileSystemWatcher prefWatcher;
 
-    public override void OnInitializeMelon()
+    public override void OnEarlyInitializeMelon()
     {
         LoggerInstance.Msg("===GIZMOLOADER LOADED===");
         preferences_Category = MelonPreferences.CreateCategory("GizmoLoader");
@@ -38,11 +38,11 @@ public class GizmoMain : MelonPlugin
         #endregion
         if (!File.Exists($"{MelonEnvironment.UserDataDirectory}/GizmoLoader.toml")) preferences_Category.SaveToFile();
         if (!Directory.Exists(MelonEnvironment.MelonBaseDirectory + ModsDirectory.Value))
-          Directory.CreateDirectory(MelonEnvironment.MelonBaseDirectory + ModsDirectory.Value);
+            Directory.CreateDirectory(MelonEnvironment.MelonBaseDirectory + ModsDirectory.Value);
 
-        foreach (var File in Directory.GetFiles(MelonEnvironment.MelonBaseDirectory + ModsDirectory.Value)) 
-          Loader.Load(File);
-        
+        foreach (var File in Directory.GetFiles(MelonEnvironment.MelonBaseDirectory + ModsDirectory.Value))
+            Loader.Load(File);
+
         watcher = new(MelonEnvironment.MelonBaseDirectory + ModsDirectory.Value);
         watcher.NotifyFilter = Filters;
         watcher.Filter = "*.dll";
