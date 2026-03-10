@@ -36,7 +36,7 @@ public struct GizmoModInfo
             /// Handle Autoproperties 
             foreach (PropertyInfo property in melon.GetType().GetProperties().Where(prop => prop.IsDefined(typeof(ReloadableProperty), false)))
             {
-                FieldInfo backingField = melon.GetType().GetField($"<{property.Name}>k__BackingField");
+                FieldInfo backingField = melon.GetType().GetField($"<{property.Name}>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance);
                 if (backingField != null)
                 {
                     fieldMapping.Add(backingField.Name, backingField.GetValue(melon));
@@ -54,7 +54,7 @@ public struct GizmoModInfo
     {
         foreach (MelonBase melon in this.Assembly.LoadedMelons)
         {
-            foreach (FieldInfo field in melon.GetType().GetFields())
+            foreach (FieldInfo field in melon.GetType().GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
             {
                 if (mapping.TryGetValue(field.Name, out object value))
                     field.SetValue(melon, value);
@@ -85,15 +85,26 @@ public static class Loader
 
     internal static void OnChanged(object sender, FileSystemEventArgs e)
     {
-        if (LoadedGizmoMods.TryGetValue(e.FullPath, out GizmoModInfo oldInstance))
-        {
-            if (sha256File(e.FullPath) == oldInstance.Hash)
-                return;
+        if (!LoadedGizmoMods.TryGetValue(e.FullPath, out GizmoModInfo oldInstance))
+            return;
 
-            GizmoMain.Logger.Msg("Reloading: " + e.Name);
-            var fieldMapping = oldInstance.FieldMapping;
-            Unload(e.FullPath);
-            Load(e.FullPath, fieldMapping);
+        for (int i = 0; i < 10; i++)
+        {
+            try
+            {
+                if (sha256File(e.FullPath) == oldInstance.Hash)
+                    return;
+
+                GizmoMain.Logger.Msg("Reloading: " + e.Name);
+                var fieldMapping = oldInstance.FieldMapping;
+                Unload(e.FullPath);
+                Load(e.FullPath, fieldMapping);
+                return;
+            }
+            catch (IOException)
+            {
+                Thread.Sleep(300);
+            }
         }
     }
 
