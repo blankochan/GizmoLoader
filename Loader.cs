@@ -36,7 +36,7 @@ public struct GizmoModInfo
             /// Handle Autoproperties 
             foreach (PropertyInfo property in melon.GetType().GetProperties().Where(prop => prop.IsDefined(typeof(ReloadableProperty), false)))
             {
-                FieldInfo backingField = melon.GetType().GetField($"<{property.Name}>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance);
+                FieldInfo backingField = melon.GetType().GetField($"<{property.Name}>k__BackingField", BindingFlags.NonPublic);
                 if (backingField != null)
                 {
                     fieldMapping.Add(backingField.Name, backingField.GetValue(melon));
@@ -54,7 +54,7 @@ public struct GizmoModInfo
     {
         foreach (MelonBase melon in this.Assembly.LoadedMelons)
         {
-            foreach (FieldInfo field in melon.GetType().GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            foreach (FieldInfo field in melon.GetType().GetFields(BindingFlags.Public | BindingFlags.NonPublic))
             {
                 if (mapping.TryGetValue(field.Name, out object value))
                     field.SetValue(melon, value);
